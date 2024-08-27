@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candlestick Chart with Plotly</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        input#end_date {
+            width: 159px;
+        }
+        input#previous_data {
+            width: 58px;
+        }
+        label#forenddate {
+            margin-left: -43px;
+        }
+        input#start_date {
+            /* left: 32px; */
+            margin-left: 13px;
+            width: 194px;
+        }
+                /* Basic styles for layout */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            transition: margin-left 0.5s; /* Smooth transition for sidebar toggle */
+        }
+
+        /* Navbar styles */
+        .navbar {
+            background-color: #333;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .navbar a {
+            float: left;
+            display: block;
+            color: #f2f2f2;
+            text-align: center;
+            padding: 14px 16px;
+            text-decoration: none;
+        }
+
+        .navbar a:hover {
+            background-color: #ddd;
+            color: black;
+        }
+
+        /* Sidebar styles */
+        .sidebar {
+            height: 100%;
+            width: 200px;
+            position: fixed;
+            top: 50px; /* Adjusted to fit below the navbar */
+            left: 0;
+            background-color: #111;
+            padding-top: 20px;
+            color: #fff;
+            transition: width 0.5s; /* Smooth transition for sidebar width */
+        }
+
+        .sidebar a {
+            padding: 10px 15px;
+            text-decoration: none;
+            color: #fff;
+            display: block;
+            text-align: left;
+        }
+
+        .sidebar a:hover {
+            background-color: #575757;
+        }
+
+        .sidebar.hidden {
+            width: 0;
+            overflow: hidden;
+        }
+
+        .sidebar-btn {
+            width: 50px;
+            height: 50px;
+            background-color: #111;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: right 0.5s; /* Smooth transition for button movement */
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
+
+        .sidebar-btn.hidden {
+            right: 0;
+        }
+
+        /* Page content styles */
+        .content {
+            margin-left: 220px; /* Space for sidebar */
+            padding: 20px;
+            margin-top: 60px; /* Space for navbar */
+        }
+
+        .form-container {
+            margin-bottom: 20px;
+        }
+
+        .form-container label {
+            margin-right: 10px;
+        }
+        .form-container select,
+        .form-container input[type="date"],
+        .form-container input[type="number"] {
+            margin-bottom: 10px;
+            padding: 5px;
+            font-size: 16px;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 800px;
+            margin-top: 2px;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <div class="navbar">
+        <a href="#">Home</a>
+        <a href="#">About</a>
+        <a href="#">Contact</a>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <!-- <button class="sidebar-btn" id="sidebar-toggle">☰</button> -->
+        <a href="#">Dashboard</a>
+        <a href="#">Reports</a>
+        <a href="#">Analytics</a>
+        <a href="#">Settings</a>
+    </div>
+
+    <!-- Page content -->
+    <div class="content">
+        <h1>Select Date Range for Prediction</h1>
+        <div class="form-container">
+            <form method="POST" onsubmit="return validateDates()">
+
+                <label for="options">Select Stock:</label>
+                <select id="options" name="ticker_symbol">
+                    <option {% if ticker_symbol == "MSFT" %} selected {% endif %} value="MSFT">MSFT : MICROSOFT CORP.</option>
+                    <option {% if ticker_symbol == "AAPL" %} selected {% endif %} value="AAPL">AAPL : APPLE INC</option>
+                  <option {% if ticker_symbol == "WMT" %} selected {% endif %} value="WMT">WMT : WALMART INC.</option>
+                  
+                  <option {% if ticker_symbol == "TSLA" %} selected {% endif %} value="TSLA">TSLA : TESLA, INC.</option>
+                  <option {% if ticker_symbol == "NFLX" %} selected {% endif %} value="NFLX">NFLX : NETFLIX, INC.</option>
+                </select> &nbsp;&nbsp; &nbsp;&nbsp;
+                <label for="previous_data">Historical Data for Days:</label>
+                <input type="number" id="previous_data" name="previous_data" step="1" min="0" value="{{previous_data}}" required>
+                <br>
+                <br>
+                <label for="start_date">Start Date:</label>
+                <input type="date" id="start_date" name="start_date" value="{{start_date}}" required>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+               
+                <label id="forenddate" for="end_date">End Date:</label>
+                <input type="date" id="end_date" name="end_date" value="{{end_date}}" required>
+                <br>
+                <br>
+                <button type="submit">Submit</button>
+            </form>
+        </div>
+        
+        <!-- Chart Container -->
+        <div class="chart-container">
+            <div id="chart"></div>
+        </div>
+
+        <script>
+            // JavaScript to validate date inputs
+            function validateDates() {
+                const startDateInput = document.getElementById('start_date');
+                const endDateInput = document.getElementById('end_date');
+                const startDate = new Date(startDateInput.value);
+                const endDate = new Date(endDateInput.value);
+                const today = new Date();
+
+                // Reset time components to midnight for comparison
+                today.setHours(0, 0, 0, 0);
+                startDate.setHours(0, 0, 0, 0);
+
+                // Ensure start date is not in the past
+                if (startDate < today) {
+                    alert('Start date cannot be a previous date.');
+                    return false;
+                }
+
+                // Ensure end date is not more than 10 days from the start date
+                const maxEndDate = new Date(startDate);
+                maxEndDate.setDate(startDate.getDate() + 20);
+
+                if (endDate > maxEndDate) {
+                    alert('End date cannot be more than 20 days from the start date.');
+                    return false;
+                }
+
+                return true; // Allow form submission
+            }
+
+            // Your custom future data
+            const trace = {
+                x: [{% for i in x %} '{{i}}', {% endfor %}],
+                close: [{% for i in close %} {{i}}, {% endfor %}],
+                high: [{% for i in high %} {{i}}, {% endfor %}],
+                low: [{% for i in low %} {{i}}, {% endfor %}],
+                open: [{% for i in open %} {{i}}, {% endfor %}],
+                type: 'candlestick',
+                xaxis: 'x',
+                yaxis: 'y'
+            };
+
+            const data = [trace];
+
+            const layout = {
+                title: 'Future Data Candlestick Chart',
+                xaxis: {
+                    title: 'Date'
+                },
+                yaxis: {
+                    title: 'Price ($)'
+                }
+            };
+
+            Plotly.newPlot('chart', data, layout);
+        </script>
+    </div>
+</body>
+</html>

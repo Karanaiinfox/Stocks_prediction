@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candlestick Chart with Plotly</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <h1>Select Date Range</h1>
+    <form  method="POST">
+        <label for="start_date">Start Date:</label>
+        <input type="date" id="start_date" name="start_date" required>
+        
+        <label for="end_date">End Date:</label>
+        <input type="date" id="end_date" name="end_date" required>
+        
+        <button type="submit">Submit</button>
+    </form>
+    
+    <div id="chart" style="width:100%;height:500px;"></div>
+
+    <script>
+        // Your custom future data
+        const trace = {
+            x: [{% for i in x %} '{{i}}', {% endfor %}],
+            close: [{% for i in close %} {{i}}, {% endfor %}],
+            high: [{% for i in high %} {{i}}, {% endfor %}],
+            low: [{% for i in low %} {{i}}, {% endfor %}],
+            open: [{% for i in open %} {{i}}, {% endfor %}],
+            type: 'candlestick',
+            xaxis: 'x',
+            yaxis: 'y'
+        };
+
+        const data = [trace];
+
+        const layout = {
+            title: 'Future Data Candlestick Chart',
+            xaxis: {
+                title: 'Date'
+            },
+            yaxis: {
+                title: 'Price'
+            }
+        };
+
+        Plotly.newPlot('chart', data, layout);
+    </script>
+</body>
+</html>
