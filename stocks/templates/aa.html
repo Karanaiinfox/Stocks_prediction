@@ -1,0 +1,571 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stocks Form</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .container {
+            width: 96%;
+            
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h3 {
+            margin-top: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .flashes {
+            list-style-type: none;
+            padding: 0;
+            margin: 10px 0;
+        }
+        .flashes li {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        .flashes .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .flashes .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        p {
+            font-size: 16px;
+            color: #555;
+        }
+        .form-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .form-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .form-row > div {
+            display: flex;
+            align-items: center;
+        }
+        .form-row label {
+            margin-right: 10px;
+        }
+        .historical-data {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .date-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .date-row label {
+            margin-right: 10px;
+        }
+        button[type="submit"] {
+            width: 120px;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button[type="submit"]:hover {
+            background-color: #45a049;
+        }
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+        }
+        label {
+            font-weight: bold;
+        }
+        input[type="number"], input[type="date"], select {
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .back-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 4px;
+            text-decoration: none;
+        }
+        .back-button:hover {
+            background-color: #45a049;
+        }
+        .chart-container {
+            width: 100%;
+            height: 500px;
+            background-color: #d3d3d3;
+        }
+        .flashes {
+        list-style-type: none;
+        padding: 0;
+        margin: 10px;
+        }
+        .flashes li {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        .flashes .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .flashes .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .checkbox-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            
+            margin: auto;
+        }
+        .checkbox-container label {
+            margin-right: 10px;
+        }
+        .checkbox-container input[type="date"],
+        .checkbox-container select,
+        .checkbox-container button {
+            margin: 10px 0;
+        }
+        .checkbox-container input[type="date"],
+        .checkbox-container select {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            width: calc(50% - 22px); /* Adjust width to fit side by side */
+        }
+        .checkbox-container button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .checkbox-container button:hover {
+            background-color: #45a049;
+        }
+        .checkbox-container .form-group {
+            margin-bottom: 15px;
+        }
+        .checkbox-container .form-group label {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        .checkbox-container .form-group input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .checkbox-container .form-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Main Stock Selection Form -->
+    
+    <form method="POST" >
+
+
+
+        <div>
+        <div class="form-container">
+            <h1>Stock Price Prediction.</h1>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="ticker_symbol">Select Stock:</label>
+                    <select id="ticker_symbol" name="ticker_symbol" required>
+                        <option value="" disabled selected>Select a ticker</option>
+                        <option value="MSFT" {% if ticker_symbol == "MSFT" %} selected {% endif %}>MSFT : MICROSOFT CORP.</option>
+                        <option value="AAPL" {% if ticker_symbol == "AAPL" %} selected {% endif %}>AAPL : APPLE INC</option>
+                        <option value="WMT" {% if ticker_symbol == "WMT" %} selected {% endif %}>WMT : WALMART INC.</option>
+                        <option value="TSLA" {% if ticker_symbol == "TSLA" %} selected {% endif %}>TSLA : TESLA, INC.</option>
+                        <option value="NFLX" {% if ticker_symbol == "NFLX" %} selected {% endif %}>NFLX : NETFLIX, INC.</option>
+                    </select>
+                </div>
+    
+                <div class="form-group">
+                    <label for="previous_data">Historical Data for Days:</label>
+                    <input type="number" id="previous_data" name="previous_data" step="1" min="0" value="{{previous_data}}" required>
+                </div>
+            </div>
+    
+            <!-- Date Range -->
+            <div class="date-row">
+                <div class="form-group">
+                    <label for="start_date">Start Date:</label>
+                    <input type="date" id="start_date" name="start_date" value="{{start_date}}">
+                </div>
+    
+                <div class="form-group">
+                    <label for="end_date">End Date:</label>
+                    <input type="date" id="end_date" name="end_date" value="{{end_date}}">
+                </div>
+            </div>
+    
+            <!-- Submit Button -->
+            <div class="form-group">
+                <button type="submit" name="prediction" value="">Submit</button>
+            </div>
+        </div>
+    
+
+        <!-- Candle Chart Section -->
+        <div class="chart-container" id="chart"></div>
+        </div>   
+     <!-- OHLC Data Form -->   
+    <div class="form-container">
+        <h3>Add Assumption data :</h3>
+        
+            <div class="form-row">
+                <div>
+                    <label for="ohlc_date">Date:</label>
+                    <input type="date" id="ohlc_date" name="ohlc_date">
+                </div>
+                <div>
+                    <label for="open">Open:</label>
+                    <input type="number" step="0.01" id="open" name="open">
+                </div>
+                <div>
+                    <label for="high">High:</label>
+                    <input type="number" step="0.01" id="high" name="high">
+                </div>
+                <div>
+                    <label for="low">Low:</label>
+                    <input type="number" step="0.01" id="low" name="low">
+                </div>
+                <div>
+                    <label for="close">Close:</label>
+                    <input type="number" step="0.01" id="close" name="close">
+                </div>
+                <div>
+                    <button type="submit" name="assumption"> Submit Data </button>
+                </div>
+            </div>
+        
+    </div>
+    <div class="container">
+        <!-- OHLC Data Section -->
+        {% if ohlc_records %}
+        <h3>OHLC Data for {{ ticker_symbol }}</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Open</th>
+                    <th>High</th>
+                    <th>Low</th>
+                    <th>Close</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in ohlc_records %}
+                    <tr>
+                        <td>{{ record.date }}</td>
+                        <td>{{ record.open }}</td>
+                        <td>{{ record.high }}</td>
+                        <td>{{ record.low }}</td>
+                        <td>{{ record.close }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p>No OHLC data available for {{ ticker_symbol }}.</p>
+        {% endif %}
+
+        <!-- Flash Messages Section -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flashes">
+                    {% for category, message in messages %}
+                        <li class="{{ category }}">{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>Performance Evaluation</h1>
+        </header>
+    
+        <!-- <h2 style="text-align: center; margin-top: 20px;">Candlestick Chart</h2> -->
+    
+        <div class="checkbox-container">
+            <div class="form-group">
+                <label for="start_date">Select Date:</label>
+                <input type="date" id="date" name="date" value="" >
+        </div>
+
+        <div class="form-group">
+            <button name="comparison" value="">Submit</button>
+        </div>
+
+        <div class="form-group">
+            <label><input type="checkbox" id="showHistorical" checked> Historical Data</label>
+            <label><input type="checkbox" id="showPrediction" checked> Prediction Values</label>
+            <label><input type="checkbox" id="showAssumptions" checked> Assumptions</label>
+        </div>
+    </div>
+    
+        <div id="chart2"></div>
+    
+      
+    </div>
+    <input hidden id="last_submit" value="{{last_submit}}">
+
+
+    </form> 
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        // Static historical data
+        const historicalData = [
+        {% for Date, Open, High, Low, Close in historical %}
+            {Date: '{{Date}}', Open: {{Open}}, High: {{High}}, Low: {{Low}}, Close: {{Close}}},
+        {% endfor %}
+            
+        ];
+
+        // Static actual values
+        const assumptions = [
+        {% for Date, Open, High, Low, Close in assumptions %}
+        {Date: '{{Date}}', Open: {{Open}}, High: {{High}}, Low: {{Low}}, Close: {{Close}}},
+        {% endfor %}
+        ];
+
+        // Static prediction values
+        const predictionValues = [
+        {% for Date, Open, High, Low, Close in predictions %}
+        {Date: '{{Date}}', Open: {{Open}}, High: {{High}}, Low: {{Low}}, Close: {{Close}}},
+        {% endfor %}
+        ];
+
+
+       
+
+        // Convert historical data to Plotly format
+        const historicalTrace = {
+            x: historicalData.map(data => data.Date),
+            close: historicalData.map(data => data.Close),
+            high: historicalData.map(data => data.High),
+            low: historicalData.map(data => data.Low),
+            open: historicalData.map(data => data.Open),
+            name: 'Historical Data',
+            type: 'candlestick',
+            increasing: { line: { color: 'green' } },
+            decreasing: { line: { color: 'red' } }
+        };
+
+        
+
+        // Convert prediction values to Plotly format
+        const predictionTrace = {
+            x: predictionValues.map(data => data.Date),
+            close: predictionValues.map(data => data.Close),
+            high: predictionValues.map(data => data.High),
+            low: predictionValues.map(data => data.Low),
+            open: predictionValues.map(data => data.Open),
+            name: 'Prediction Values',
+            type: 'candlestick',
+            increasing: { line: { color: 'purple' } },
+            decreasing: { line: { color: 'orange' } }
+        };
+
+        // Convert assumptions values to Plotly format
+        const assumptionsTrace = {
+            x: assumptions.map(data => data.Date),
+            close: assumptions.map(data => data.Close),
+            high: assumptions.map(data => data.High),
+            low: assumptions.map(data => data.Low),
+            open: assumptions.map(data => data.Open),
+            name: 'Assumptions',
+            type: 'candlestick',
+            increasing: { line: { color: 'black' } },
+            decreasing: { line: { color: 'gray' } }
+        };
+
+        // Combine traces into a single data array
+        const traces = {
+            historical: historicalTrace,
+            prediction: predictionTrace,
+            assumptions: assumptionsTrace
+        };
+
+        // Define layout
+         layout = {
+            title: 'Candlestick Chart',
+            xaxis: {
+                title: 'Date',
+                rangeslider: { visible: true }  // Hide range slider
+            },
+            yaxis: {
+                title: 'Price'
+            },
+            legend: {
+                x: 0.1,
+                y: 1.1,
+                orientation: 'v'
+            }
+        };
+
+        // Render the chart with all traces initially
+        Plotly.newPlot('chart2', Object.values(traces), layout);
+
+        // Function to update chart visibility based on checkboxes
+        function updateChart() {
+            const visibleTraces = [];
+            if (document.getElementById('showHistorical').checked) visibleTraces.push(traces.historical);
+            if (document.getElementById('showPrediction').checked) visibleTraces.push(traces.prediction);
+            if (document.getElementById('showAssumptions').checked) visibleTraces.push(traces.assumptions);
+            
+            Plotly.react('chart2', visibleTraces, layout);
+        }
+
+        // Attach event listeners to checkboxes
+        document.getElementById('showHistorical').addEventListener('change', updateChart);
+        document.getElementById('showPrediction').addEventListener('change', updateChart);
+        document.getElementById('showAssumptions').addEventListener('change', updateChart);
+
+        // Function to download chart as an image
+        function downloadChart() {
+            Plotly.downloadImage('chart2', {
+                format: 'png',
+                filename: 'candlestick_chart'
+            });
+        }
+    </script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        function validateDates() {
+            const startDate = new Date(document.getElementById('start_date').value);
+            const endDate = new Date(document.getElementById('end_date').value);
+            const today = new Date();
+
+            if (startDate < today) {
+                alert('Start date cannot be in the past.');
+                return false;
+            }
+            if (endDate > startDate.setDate(startDate.getDate() + 20)) {
+                alert('End date cannot be more than 20 days from start date.');
+                return false;
+            }
+            return true;
+        }
+
+        function handleOHLCSubmit() {
+            // Example: Validate if ticker symbol is selected
+            const tickerSymbol = document.getElementById('shared_ticker_symbol').value;
+            console.log('Ticker Symbol:', tickerSymbol);
+
+            if (!tickerSymbol) {
+                alert('Please select a stock symbol before submitting OHLC data.');
+                return false;
+            }
+            // You can add more validation logic here if needed
+            return true; // Allow form submission
+        }
+
+        // Candlestick chart logic with Plotly
+        const trace = {
+            x: [{% for i in x %} '{{i}}', {% endfor %}],
+            close: [{% for i in close %} {{i}}, {% endfor %}],
+            high: [{% for i in high %} {{i}}, {% endfor %}],
+            low: [{% for i in low %} {{i}}, {% endfor %}],
+            open: [{% for i in open %} {{i}}, {% endfor %}],
+            type: 'candlestick',
+            xaxis: 'x',
+            yaxis: 'y'
+        };
+
+        const data = [trace];
+        const layout = {
+            title: 'Future Data Candlestick Chart',
+            xaxis: {
+                title: 'Date'
+            },
+            yaxis: {
+                title: 'Price ($)'
+            }
+        };
+        Plotly.newPlot('chart', data, layout);
+        document.getElementById('ticker_symbol').addEventListener('change', function() {
+        const selectedSymbol = this.value;
+        localStorage.setItem('ticker_symbol', selectedSymbol);
+    });
+
+    // window.onload = function() {
+    //     const tickerSymbol = localStorage.getItem('ticker_symbol');
+    //     if (tickerSymbol) {
+    //         document.getElementById('ticker_symbol').value = tickerSymbol;
+    //         document.getElementById('shared_ticker_symbol').value = tickerSymbol;
+    //     }
+    // };
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Get the value of the hidden input
+            var lastSubmit = document.getElementById('last_submit').value;
+            
+            // Check if the value is 'assumption'
+            if (lastSubmit === 'comparison') {
+                // Scroll to the bottom of the page
+                window.scrollTo(0, document.body.scrollHeight);
+            }
+        });
+    </script>
+
+</body>
+</html>
