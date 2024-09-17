@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Trading Platform</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            padding: 0;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .tradingview-container {
+            margin-bottom: 40px;
+        }
+
+        .form-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .form-group {
+            flex: 1;
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        .form-group button {
+            width: 100%;
+            padding: 10px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .form-group button.sell {
+            background-color: #dc3545;
+        }
+
+        .history-container {
+            margin-top: 40px;
+        }
+
+        .history-container h2 {
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- TradingView Widget -->
+        <div class="tradingview-container">
+            <div id="tradingview-widget-container"></div>
+            <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+            <script type="text/javascript">
+                new TradingView.widget({
+                    "width": "100%",
+                    "height": 500,
+                    "symbol": "NASDAQ:AAPL",
+                    "interval": "D",
+                    "timezone": "Etc/UTC",
+                    "theme": "light",
+                    "style": "1",
+                    "locale": "en",
+                    "toolbar_bg": "#f1f3f6",
+                    "enable_publishing": false,
+                    "allow_symbol_change": true,
+                    "container_id": "tradingview-widget-container"
+                });
+            </script>
+        </div>
+
+        <!-- Buy/Sell Form -->
+        <div class="form-container">
+            <div class="form-group">
+                <label for="stock_symbol">Stock Symbol</label>
+                <select id="stock_symbol" name="stock_symbol">
+                    <option value="AAPL">AAPL - Apple Inc.</option>
+                    <option value="MSFT">MSFT - Microsoft Corp.</option>
+                    <option value="TSLA">TSLA - Tesla, Inc.</option>
+                    <option value="NFLX">NFLX - Netflix, Inc.</option>
+                    <option value="GOOGL">GOOGL - Alphabet Inc.</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="quantity">Quantity</label>
+                <input type="number" id="quantity" name="quantity" min="1" value="1" required>
+            </div>
+
+            <div class="form-group">
+                <label for="price">Price</label>
+                <input type="number" id="price" name="price" min="0.01" step="0.01" required>
+            </div>
+
+            <div class="form-group">
+                <label for="trade_type">Trade Type</label>
+                <select id="trade_type" name="trade_type">
+                    <option value="buy">Buy</option>
+                    <option value="sell">Sell</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="buy">Buy</button>
+                <button type="submit" class="sell">Sell</button>
+            </div>
+        </div>
+
+        <!-- Buy/Sell History -->
+        <div class="history-container">
+            <h2>Buy/Sell History</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Stock Symbol</th>
+                        <th>Quantity</th>
+                        <th>Price</th>
+                        <th>Total Value</th>
+                        <th>Trade Type</th>
+                    </tr>
+                </thead>
+                <tbody id="history-body">
+                    <!-- History entries will go here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.querySelector('.buy').addEventListener('click', function (e) {
+            e.preventDefault();
+            addHistory('buy');
+        });
+
+        document.querySelector('.sell').addEventListener('click', function (e) {
+            e.preventDefault();
+            addHistory('sell');
+        });
+
+        function addHistory(type) {
+            const symbol = document.getElementById('stock_symbol').value;
+            const quantity = document.getElementById('quantity').value;
+            const price = document.getElementById('price').value;
+            const date = new Date().toLocaleString();
+
+            const totalValue = (quantity * price).toFixed(2);
+            const tradeType = type === 'buy' ? 'Buy' : 'Sell';
+
+            const row = `<tr>
+                            <td>${date}</td>
+                            <td>${symbol}</td>
+                            <td>${quantity}</td>
+                            <td>${price}</td>
+                            <td>${totalValue}</td>
+                            <td>${tradeType}</td>
+                        </tr>`;
+            document.getElementById('history-body').insertAdjacentHTML('beforeend', row);
+        }
+        document.querySelector('.buy').addEventListener('click', async function (e) {
+        e.preventDefault();
+        const symbol = document.getElementById('stock_symbol').value;
+        const quantity = document.getElementById('quantity').value;
+        
+        const response = await fetch('/buy', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ symbol, quantity })
+        });
+        const data = await response.json();
+        console.log(data); // Handle response
+    });
+
+    document.querySelector('.sell').addEventListener('click', async function (e) {
+        e.preventDefault();
+        const symbol = document.getElementById('stock_symbol').value;
+        const quantity = document.getElementById('quantity').value;
+        
+        const response = await fetch('/sell', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ symbol, quantity })
+        });
+        const data = await response.json();
+        console.log(data); // Handle response
+    });
+
+    </script>
+</body>
+
+</html>

@@ -520,8 +520,8 @@ def index():
     assumptions = []
     predictions = []
     ohlc_date = ''
-    no_days=''
-    comparison_date=''
+    no_days = ''
+    comparison_date = ''
     try:
         if request.method == 'POST':
             print(request.form, 'requests')
@@ -531,6 +531,7 @@ def index():
                 start_date = request.form.get('start_date')
                 end_date = request.form.get('end_date')
                 no_days = request.form.get('no_days', 150)
+                ticker_symbol = request.form.get('ticker_symbol')
                 if no_days == '':
                     no_days = 150
                 else:
@@ -540,7 +541,7 @@ def index():
                 print("Type of No_Of_Days:", type(no_days))
 
                 date = request.form.get('date')
-                comparison_date=date
+                comparison_date = date
                 print(date, "asdfghjk")
                 enddate = datetime.today().date()
                 enddate = enddate + timedelta(days=1)
@@ -625,6 +626,7 @@ def index():
                 end_date = request.form.get('end_date')
                 previous_data = int(request.form.get('previous_data'))
                 ticker_symbol = request.form.get('ticker_symbol')
+
                 print("TRRhxdg", start_date, end_date, ticker_symbol)
                 if 'MSFT' in ticker_symbol or 'NFLX' in ticker_symbol:
                     data = get_stock_price(start_date, end_date,
@@ -632,6 +634,7 @@ def index():
                 else:
                     data = get_data(start_date, end_date,
                                     previous_data, ticker_symbol)
+                    print("TRRhxdg", start_date, end_date, ticker_symbol)
 
             else:
                 last_submit = 'assumption'
@@ -649,6 +652,7 @@ def index():
                 ticker_symbol = request.form.get('ticker_symbol')
                 print("TRRhxdg", start_date, end_date, ticker_symbol)
                 if 'MSFT' in ticker_symbol or 'NFLX' in ticker_symbol:
+
                     data = get_stock_price(start_date, end_date,
                                            previous_data, ticker_symbol)
                 else:
@@ -719,7 +723,7 @@ def index():
                         db.session.add(new_ohlc)
                         db.session.commit()
                         flash('OHLC data added successfully!', 'success')
-                        # return redirect(url_for('add_ohlc'))
+
                     except Exception as e:
                         db.session.rollback()
                         flash(f'Error adding OHLC data: {e}', 'danger')
@@ -744,8 +748,438 @@ def index():
         for record in ohlc_data
     ]
     print(start_date, end_date)
-    return render_template('aa.html',comparison_date=comparison_date,no_days=no_days, last_submit=last_submit, ohlc_date=ohlc_date, x=x, close=close, high=high, low=low, open=open, start_date=start_date, end_date=end_date, previous_data=previous_data, ticker_symbol=ticker_symbol, ohlc_records=ohlc_records,
+    return render_template('option01.html', comparison_date=comparison_date, no_days=no_days, last_submit=last_submit, ohlc_date=ohlc_date, x=x, close=close, high=high, low=low, open=open, start_date=start_date, end_date=end_date, previous_data=previous_data, ticker_symbol=ticker_symbol, ohlc_records=ohlc_records,
                            historical=historical, assumptions=assumptions, predictions=predictions)
+
+
+@app.route('/option02', methods=['GET', 'POST'])
+def option02():
+    # Initialize variables with default values
+    last_submit = ''
+    start_date = ''
+    end_date = ''
+    no_days = 150
+    previous_data = 150
+    ticker_symbol = 'MSFT'
+    ohlc_date = ''  # Initialize ohlc_date
+    comparison_date = ''
+    ticker = yf.Ticker(ticker_symbol)
+    df = ticker.history(period='1y')
+    df.reset_index(inplace=True)
+    data = df[['Open', 'High', 'Low', 'Close', 'Date']]
+    data = data[-150:]
+    historical = []
+    assumptions = []
+    predictions = []
+    historical_records = []
+    dfsingles = []
+
+    if request.method == 'POST':
+        print(request.form, 'requests')
+
+        if 'comparison' in request.form:
+            last_submit = 'comparison'
+            start_date = request.form.get('start_date')
+            end_date = request.form.get('end_date')
+            no_days = int(request.form.get('no_days', 150))
+            ticker_symbol = request.form.get('ticker_symbol')
+            comparison_date = request.form.get('date')
+            comparison_date = datetime.strptime(
+                comparison_date, '%Y-%m-%d').date()
+
+            historical_df = df
+            historical_df['Date'] = pd.to_datetime(
+                historical_df['Date']).dt.date
+            filtered_data = historical_df[historical_df['Date'] == comparison_date][[
+                'Date', 'Open', 'High', 'Low', 'Close']]
+            dfsingle = pd.DataFrame(filtered_data)
+            dates = list(filtered_data['Date'])
+            opens = list(filtered_data['Open'])
+            highs = list(filtered_data['High'])
+            lows = list(filtered_data['Low'])
+            closes = list(filtered_data['Close'])
+            historical_records = list(zip(dates, opens, highs, lows, closes))
+
+            enddate = datetime.today().date() + timedelta(days=1)
+            startdate = enddate - timedelta(days=no_days)
+            print(f"Fetching data from {startdate} to {enddate}")
+
+            ticker = yf.Ticker(ticker_symbol)
+            df = ticker.history(start=startdate, end=enddate)
+            df.reset_index(inplace=True)
+            datas = df[['Open', 'High', 'Low', 'Close', 'Date']]
+            date_list = list(datas['Date'])
+            open_list = list(datas['Open'])
+            high_list = list(datas['High'])
+            low_list = list(datas['Low'])
+            close_list = list(datas['Close'])
+            historical = list(
+                zip(date_list, open_list, high_list, low_list, close_list))
+
+            assumptions_records = OHLC.query.filter_by(
+                ticker_symbol=ticker_symbol, date=comparison_date)
+            dates = []
+            assumed_opens = []
+            assumed_highs = []
+            assumed_lows = []
+            assumed_closes = []
+            for record in assumptions_records:
+                dates.append(record.date.strftime('%Y-%m-%d'))
+                assumed_opens.append(record.open_value)
+                assumed_highs.append(record.high_value)
+                assumed_lows.append(record.low_value)
+                assumed_closes.append(record.close_value)
+            assumptions_df = pd.DataFrame({
+                'Date': dates,
+                'Open': assumed_opens,
+                'High': assumed_highs,
+                'Low': assumed_lows,
+                'Close': assumed_closes
+            })
+            dfsingle = pd.concat([dfsingle, assumptions_df], ignore_index=True)
+            assumptions = list(
+                zip(dates, assumed_opens, assumed_highs, assumed_lows, assumed_closes))
+
+            predicted_records = OHLC.query.filter_by(
+                ticker_symbol=ticker_symbol, date=comparison_date)
+            dates = []
+            pred_opens = []
+            pred_highs = []
+            pred_lows = []
+            pred_closes = []
+            for record in predicted_records:
+                dates.append(record.date.strftime('%Y-%m-%d'))
+                pred_opens.append(record.pred_open_value)
+                pred_highs.append(record.pred_high_value)
+                pred_lows.append(record.pred_low_value)
+                pred_closes.append(record.pred_close_value)
+            predictions_df = pd.DataFrame({
+                'Date': dates,
+                'Open': pred_opens,
+                'High': pred_highs,
+                'Low': pred_lows,
+                'Close': pred_closes
+            })
+            dfsingle = pd.concat([dfsingle, predictions_df], ignore_index=True)
+            dfsingles = list(zip(dfsingle['Date'], dfsingle['Open'],
+                             dfsingle['High'], dfsingle['Low'], dfsingle['Close']))
+            predictions = list(
+                zip(dates, pred_opens, pred_highs, pred_lows, pred_closes))
+
+        elif 'prediction' in request.form:
+            last_submit = 'prediction'
+            start_date = request.form.get('start_date')
+            end_date = request.form.get('end_date')
+            previous_data = int(request.form.get('previous_data'))
+            ticker_symbol = request.form.get('ticker_symbol')
+            if 'MSFT' in ticker_symbol or 'NFLX' in ticker_symbol:
+                data = get_stock_price(
+                    start_date, end_date, previous_data, ticker_symbol)
+            else:
+                data = get_data(start_date, end_date,
+                                previous_data, ticker_symbol)
+
+        else:
+            ohlc_date = request.form.get(
+                'ohlc_date', '')  # Initialize ohlc_date
+            ticker_symbol = request.form.get('ticker_symbol')
+            open_value = request.form.get('open')
+            high_value = request.form.get('high')
+            low_value = request.form.get('low')
+            close_value = request.form.get('close')
+            date_obj = datetime.strptime(ohlc_date, '%Y-%m-%d').date()
+            existing_record = OHLC.query.filter_by(
+                date=date_obj, ticker_symbol=ticker_symbol).first()
+            if existing_record:
+                existing_record.open_value = float(open_value)
+                existing_record.high_value = float(high_value)
+                existing_record.low_value = float(low_value)
+                existing_record.close_value = float(close_value)
+
+                if 'MSFT' in ticker_symbol or 'NFLX' in ticker_symbol:
+                    datas = get_stock_price(
+                        ohlc_date, ohlc_date, 1, ticker_symbol)
+                    print("ASDFG", ticker_symbol)
+                    print("Dataaaaa", datas)
+                else:
+                    datas = get_data(ohlc_date, ohlc_date, 1, ticker_symbol)
+                print("qwertyui", ticker_symbol)
+                print(datas)
+                last_row = datas.iloc[-1]
+                existing_record.pred_open_value = last_row['Open']
+                existing_record.pred_high_value = last_row['High']
+                existing_record.pred_low_value = last_row['Low']
+                existing_record.pred_close_value = last_row['Close']
+                flash('OHLC data updated successfully!', 'success')
+
+            else:
+                if 'MSFT' in ticker_symbol or 'NFLX' in ticker_symbol:
+                    datas = get_stock_price(
+                        ohlc_date, ohlc_date, 1, ticker_symbol)
+                    print("ticker", ticker_symbol)
+                    print(datas, "data")
+                else:
+                    datas = get_data(ohlc_date, ohlc_date, 1, ticker_symbol)
+                print("ticker1", ticker_symbol)
+                print("data", datas)
+                last_row = datas.iloc[-1]
+                new_ohlc = OHLC(date=date_obj,
+                                ticker_symbol=ticker_symbol,
+                                open_value=float(open_value),
+                                high_value=float(high_value),
+                                low_value=float(low_value),
+                                close_value=float(close_value),
+                                pred_open_value=last_row['Open'],
+                                pred_high_value=last_row['High'],
+                                pred_low_value=last_row['Low'],
+                                pred_close_value=last_row['Close']
+                                )
+                try:
+                    db.session.add(new_ohlc)
+                    db.session.commit()
+                    flash('OHLC data added successfully!', 'success')
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Error adding OHLC data: {e}', 'danger')
+
+    x = list(data['Date'])
+    close = list(data['Close'])
+    high = list(data['High'])
+    low = list(data['Low'])
+    open = list(data['Open'])
+    print("recordsList")
+
+    ohlc_data = OHLC.query.filter_by(ticker_symbol=ticker_symbol).all()
+    print("--------", ohlc_data, "---------------")
+    ohlc_records = [
+        {
+            'date': record.date,
+            'open': record.open_value,
+            'high': record.high_value,
+            'low': record.low_value,
+            'close': record.close_value
+        }
+        for record in ohlc_data
+    ]
+
+    return render_template('option02.html', comparison_date=comparison_date, no_days=no_days, last_submit=last_submit, ohlc_date=ohlc_date, x=x, close=close, high=high, low=low, open=open, previous_data=previous_data, ticker_symbol=ticker_symbol,
+                           ohlc_records=ohlc_records, historical=historical, assumptions=assumptions, predictions=predictions, historical_records=historical_records, dfsingles=dfsingles
+                           )
+
+@app.route('/tradingview', methods=['GET', 'POST'])
+def tradingview():
+    # Initialize variables with default values
+    last_submit = ''
+    start_date = ''
+    end_date = ''
+    no_days = 150
+    previous_data = 150
+    ticker_symbol = 'MSFT'
+    ohlc_date = ''  # Initialize ohlc_date
+    comparison_date = ''
+    ticker = yf.Ticker(ticker_symbol)
+    df = ticker.history(period='1y')
+    df.reset_index(inplace=True)
+    data = df[['Open', 'High', 'Low', 'Close', 'Date']]
+    data = data[-150:]
+    historical = []
+    assumptions = []
+    predictions = []
+    historical_records = []
+    dfsingles = []
+
+    if request.method == 'POST':
+        print(request.form, 'requests')
+
+        if 'comparison' in request.form:
+            last_submit = 'comparison'
+            start_date = request.form.get('start_date')
+            end_date = request.form.get('end_date')
+            no_days = int(request.form.get('no_days', 150))
+            ticker_symbol = request.form.get('ticker_symbol')
+            comparison_date = request.form.get('date')
+            comparison_date = datetime.strptime(
+                comparison_date, '%Y-%m-%d').date()
+
+            historical_df = df
+            historical_df['Date'] = pd.to_datetime(
+                historical_df['Date']).dt.date
+            filtered_data = historical_df[historical_df['Date'] == comparison_date][[
+                'Date', 'Open', 'High', 'Low', 'Close']]
+            dfsingle = pd.DataFrame(filtered_data)
+            dates = list(filtered_data['Date'])
+            opens = list(filtered_data['Open'])
+            highs = list(filtered_data['High'])
+            lows = list(filtered_data['Low'])
+            closes = list(filtered_data['Close'])
+            historical_records = list(zip(dates, opens, highs, lows, closes))
+
+            enddate = datetime.today().date() + timedelta(days=1)
+            startdate = enddate - timedelta(days=no_days)
+            print(f"Fetching data from {startdate} to {enddate}")
+
+            ticker = yf.Ticker(ticker_symbol)
+            df = ticker.history(start=startdate, end=enddate)
+            df.reset_index(inplace=True)
+            datas = df[['Open', 'High', 'Low', 'Close', 'Date']]
+            date_list = list(datas['Date'])
+            open_list = list(datas['Open'])
+            high_list = list(datas['High'])
+            low_list = list(datas['Low'])
+            close_list = list(datas['Close'])
+            historical = list(
+                zip(date_list, open_list, high_list, low_list, close_list))
+
+            assumptions_records = OHLC.query.filter_by(
+                ticker_symbol=ticker_symbol, date=comparison_date)
+            dates = []
+            assumed_opens = []
+            assumed_highs = []
+            assumed_lows = []
+            assumed_closes = []
+            for record in assumptions_records:
+                dates.append(record.date.strftime('%Y-%m-%d'))
+                assumed_opens.append(record.open_value)
+                assumed_highs.append(record.high_value)
+                assumed_lows.append(record.low_value)
+                assumed_closes.append(record.close_value)
+            assumptions_df = pd.DataFrame({
+                'Date': dates,
+                'Open': assumed_opens,
+                'High': assumed_highs,
+                'Low': assumed_lows,
+                'Close': assumed_closes
+            })
+            dfsingle = pd.concat([dfsingle, assumptions_df], ignore_index=True)
+            assumptions = list(
+                zip(dates, assumed_opens, assumed_highs, assumed_lows, assumed_closes))
+
+            predicted_records = OHLC.query.filter_by(
+                ticker_symbol=ticker_symbol, date=comparison_date)
+            dates = []
+            pred_opens = []
+            pred_highs = []
+            pred_lows = []
+            pred_closes = []
+            for record in predicted_records:
+                dates.append(record.date.strftime('%Y-%m-%d'))
+                pred_opens.append(record.pred_open_value)
+                pred_highs.append(record.pred_high_value)
+                pred_lows.append(record.pred_low_value)
+                pred_closes.append(record.pred_close_value)
+            predictions_df = pd.DataFrame({
+                'Date': dates,
+                'Open': pred_opens,
+                'High': pred_highs,
+                'Low': pred_lows,
+                'Close': pred_closes
+            })
+            dfsingle = pd.concat([dfsingle, predictions_df], ignore_index=True)
+            dfsingles = list(zip(dfsingle['Date'], dfsingle['Open'],
+                             dfsingle['High'], dfsingle['Low'], dfsingle['Close']))
+            predictions = list(
+                zip(dates, pred_opens, pred_highs, pred_lows, pred_closes))
+
+        elif 'prediction' in request.form:
+            last_submit = 'prediction'
+            start_date = request.form.get('start_date')
+            end_date = request.form.get('end_date')
+            previous_data = int(request.form.get('previous_data'))
+            ticker_symbol = request.form.get('ticker_symbol')
+            if 'MSFT' in ticker_symbol or 'NFLX' in ticker_symbol:
+                data = get_stock_price(
+                    start_date, end_date, previous_data, ticker_symbol)
+            else:
+                data = get_data(start_date, end_date,
+                                previous_data, ticker_symbol)
+
+        else:
+            ohlc_date = request.form.get(
+                'ohlc_date', '')  # Initialize ohlc_date
+            ticker_symbol = request.form.get('ticker_symbol')
+            open_value = request.form.get('open')
+            high_value = request.form.get('high')
+            low_value = request.form.get('low')
+            close_value = request.form.get('close')
+            date_obj = datetime.strptime(ohlc_date, '%Y-%m-%d').date()
+            existing_record = OHLC.query.filter_by(
+                date=date_obj, ticker_symbol=ticker_symbol).first()
+            if existing_record:
+                existing_record.open_value = float(open_value)
+                existing_record.high_value = float(high_value)
+                existing_record.low_value = float(low_value)
+                existing_record.close_value = float(close_value)
+
+                if 'MSFT' in ticker_symbol or 'NFLX' in ticker_symbol:
+                    datas = get_stock_price(
+                        ohlc_date, ohlc_date, 1, ticker_symbol)
+                    print("ASDFG", ticker_symbol)
+                    print("Dataaaaa", datas)
+                else:
+                    datas = get_data(ohlc_date, ohlc_date, 1, ticker_symbol)
+                print("qwertyui", ticker_symbol)
+                print(datas)
+                last_row = datas.iloc[-1]
+                existing_record.pred_open_value = last_row['Open']
+                existing_record.pred_high_value = last_row['High']
+                existing_record.pred_low_value = last_row['Low']
+                existing_record.pred_close_value = last_row['Close']
+                flash('OHLC data updated successfully!', 'success')
+
+            else:
+                if 'MSFT' in ticker_symbol or 'NFLX' in ticker_symbol:
+                    datas = get_stock_price(
+                        ohlc_date, ohlc_date, 1, ticker_symbol)
+                    print("ticker", ticker_symbol)
+                    print(datas, "data")
+                else:
+                    datas = get_data(ohlc_date, ohlc_date, 1, ticker_symbol)
+                print("ticker1", ticker_symbol)
+                print("data", datas)
+                last_row = datas.iloc[-1]
+                new_ohlc = OHLC(date=date_obj,
+                                ticker_symbol=ticker_symbol,
+                                open_value=float(open_value),
+                                high_value=float(high_value),
+                                low_value=float(low_value),
+                                close_value=float(close_value),
+                                pred_open_value=last_row['Open'],
+                                pred_high_value=last_row['High'],
+                                pred_low_value=last_row['Low'],
+                                pred_close_value=last_row['Close']
+                                )
+                try:
+                    db.session.add(new_ohlc)
+                    db.session.commit()
+                    flash('OHLC data added successfully!', 'success')
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Error adding OHLC data: {e}', 'danger')
+
+    x = list(data['Date'])
+    close = list(data['Close'])
+    high = list(data['High'])
+    low = list(data['Low'])
+    open = list(data['Open'])
+    print("recordsList")
+
+    ohlc_data = OHLC.query.filter_by(ticker_symbol=ticker_symbol).all()
+    print("--------", ohlc_data, "---------------")
+    ohlc_records = [
+        {
+            'date': record.date,
+            'open': record.open_value,
+            'high': record.high_value,
+            'low': record.low_value,
+            'close': record.close_value
+        }
+        for record in ohlc_data
+    ]
+
+    return render_template('tradingview.html', comparison_date=comparison_date, no_days=no_days, last_submit=last_submit, ohlc_date=ohlc_date, x=x, close=close, high=high, low=low, open=open, previous_data=previous_data, ticker_symbol=ticker_symbol,
+                           ohlc_records=ohlc_records, historical=historical, assumptions=assumptions, predictions=predictions, historical_records=historical_records, dfsingles=dfsingles
+                           )
+
 
 
 @app.route('/add_ohlc', methods=['GET', 'POST'])
@@ -810,12 +1244,18 @@ def add_ohlc():
                 db.session.add(new_ohlc)
                 db.session.commit()
                 flash('OHLC data added successfully!', 'success')
-                # return redirect(url_for('add_ohlc'))
+
             except Exception as e:
                 db.session.rollback()
                 flash(f'Error adding OHLC data: {e}', 'danger')
 
     return redirect(url_for('index'))
+
+@app.route('/trade', methods=['GET', 'POST'])
+def trade():
+
+    return render_template('trade.html') 
+
 
 
 if __name__ == "__main__":
