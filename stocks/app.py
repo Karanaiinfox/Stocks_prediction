@@ -14,19 +14,107 @@ import base64
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask import Flask, render_template, request, flash, redirect, url_for
 from datetime import datetime
+from flask import Flask, render_template, request, redirect, flash
+import alpaca_trade_api as tradeapi
+from flask import Flask, request, jsonify
+from alpaca.trading.client import TradingClient # type: ignore
+from alpaca.trading.requests import MarketOrderRequest
+from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.trading.requests import GetOrdersRequest
+from alpaca.trading.enums import QueryOrderStatus
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_bcrypt import Bcrypt
+from flask_migrate import Migrate
+
+
+
 # from stock import db
 warnings.filterwarnings('ignore')
 
 
 app = Flask(__name__)
+
+SEC_KEY = "pg3e1tBHvvrlGjxMk6QgiMUAzJMKuW6ybI7m3Xua"
+PUB_KEY = "PK1GLKD13RBD5AQNFEKF"
+BASE_URL = "https://paper-api.alpaca.markets"
+
+# Initialize Alpaca API
+api = tradeapi.REST(key_id=PUB_KEY, secret_key=SEC_KEY, base_url=BASE_URL)
+trading_client = TradingClient(PUB_KEY,SEC_KEY,paper=True)
+
 # Corrected URI format
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///stocks.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = 'd4e4f4e9c3a0f0b7a8f9d1e2c0f7e9b1'
-
-
 db = SQLAlchemy()
+migrate = Migrate(app, db)  # Initialize Flask-Migrate
+
+
+
 db.init_app(app)
+
+app.config['JWT_SECRET_KEY'] = 'da7787a51c44ee84aaa1de4493cdea8ff1678ad62d61c7ee6215fc20690d6e6d'  # Secret for signing JWT
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)  # ✅ Token expires in 1 day
+
+bcrypt = Bcrypt(app)
+jwt = JWTManager(app)
+
+login_manager = LoginManager()
+login_manager.login_view = "login"
+login_manager.init_app(app)
+
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+    wallet = db.relationship('Wallet', backref='user', uselist=False)  # One-to-One
+
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+class Wallet(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)  # One-to-One with User
+    available_balance = db.Column(db.Float, default=5000.0)  # Available funds
+    freezed_balance = db.Column(db.Float, default=2000.0)  # Funds on hold
+    token = db.Column(db.String(100), default= 'USD')  # Unique token
+    status = db.Column(db.String(20), default='active')  # active/inactive
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+class UserStock(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # Owner of stock
+    symbol = db.Column(db.String(10), nullable=False)  # Stock symbol (e.g., AAPL)
+    quantity = db.Column(db.Integer, nullable=False, default=0)  # Number of shares
+    avg_price = db.Column(db.Float, nullable=False)  # Average price per share
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('stocks', lazy=True))
+   
+
+class Transaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    wallet_id = db.Column(db.Integer, db.ForeignKey('wallet.id'), nullable=False)  
+    alpaca_order_id = db.Column(db.String(50), unique=True, nullable=True)  # New column for Alpaca order ID
+
+    type = db.Column(db.String(10), nullable=False)  # 'buy' or 'sell'
+    before_balance = db.Column(db.Float, nullable=False)  
+    after_balance = db.Column(db.Float, nullable=False)  
+    comment = db.Column(db.String(255))  
+    datetime = db.Column(db.DateTime, default=datetime.utcnow)  
+    status = db.Column(db.String(20), default='pending')  
+
+    wallet = db.relationship('Wallet', backref=db.backref('transactions', lazy=True))
+
 
 
 class OHLC(db.Model):
@@ -56,6 +144,9 @@ class OHLC(db.Model):
         self.pred_close_value = pred_close_value
 
 
+
+
+
 def get_data(start_date, end_date, history, ticker_symbol):
     model_open = joblib.load(f'saved_models/model_open_{ticker_symbol}.joblib')
     model_low = joblib.load(f'saved_models/model_low_{ticker_symbol}.joblib')
@@ -75,9 +166,11 @@ def get_data(start_date, end_date, history, ticker_symbol):
         feature = 2
     ticker_symbol = ticker_symbol  # Example: Apple Inc.
     ticker = yf.Ticker(ticker_symbol)
+    # print(df,"historu")
     df = ticker.history(period='10y')
     df.reset_index(inplace=True)
     currentdate = str(datetime.now().date())
+    # print(df,"dataa")
     if currentdate in str(df.iloc[-1]['Date']):
         print('date present+++++++++++++++++++++++++++++++++++')
         df = df[:-1]
@@ -166,13 +259,17 @@ def get_data(start_date, end_date, history, ticker_symbol):
 
     return df_candlesticks
 
-
 def get_stock_price(start_date, end_date, history, ticker_symbol):
     print(start_date, end_date, history, ticker_symbol,
           'history========================')
     model_open = joblib.load(f'saved_models/model_open_{ticker_symbol}.joblib')
+    print("a")
     model_low = joblib.load(f'saved_models/model_low_{ticker_symbol}.joblib')
+    print("a")
+
     model_high = joblib.load(f'saved_models/model_high_{ticker_symbol}.joblib')
+    print("a")
+
     model_change = joblib.load(
         f'saved_models/model_change_{ticker_symbol}.joblib')
     model_close = joblib.load(
@@ -187,16 +284,26 @@ def get_stock_price(start_date, end_date, history, ticker_symbol):
         f'saved_models/scaler_for_change_{ticker_symbol}.joblib')
     scaler_for_close = joblib.load(
         f'saved_models/scaler_for_close_{ticker_symbol}.joblib')
+
     feature = 2
+    print("b")
     ticker_symbol = ticker_symbol  # Example: Apple Inc.
+    print( ticker_symbol,"b")
+
     ticker = yf.Ticker(ticker_symbol)
+    print(yf,"yffff")
+    print( ticker,"b")
+
     df = ticker.history(period='10y')
+    # df = ticker.history
+
+    print(df,"dfdfdfdsff")
 
     df.reset_index(inplace=True)
     currentdate = str(datetime.now().date())
 
     if currentdate in str(df.iloc[-1]['Date']):
-        print('date present+++++++++++++++++++++++++++++++++++')
+        print(df,'date present+++++++++++++++++++++++++++++++++++')
         df = df[:-1]
     df['Low_Open'] = (df['Low'] - df['Open']) / df['Open']
     df['Low_Open'] = df['Low_Open'].shift(1)
@@ -395,7 +502,6 @@ def get_stock_price(start_date, end_date, history, ticker_symbol):
     print("tdhhhhhhh", df_candlesticks)
     return df_candlesticks
 
-
 @app.route('/performance', methods=['GET', 'POST'])
 def performance():
     print(OHLC.query.all(), '===========')
@@ -503,6 +609,7 @@ def performance():
 
 
 @ app.route('/', methods=['GET', 'POST'])
+@login_required
 def index():
     last_submit = ''
     start_date = ''
@@ -751,8 +858,8 @@ def index():
     return render_template('option01.html', comparison_date=comparison_date, no_days=no_days, last_submit=last_submit, ohlc_date=ohlc_date, x=x, close=close, high=high, low=low, open=open, start_date=start_date, end_date=end_date, previous_data=previous_data, ticker_symbol=ticker_symbol, ohlc_records=ohlc_records,
                            historical=historical, assumptions=assumptions, predictions=predictions)
 
-
 @app.route('/option02', methods=['GET', 'POST'])
+@login_required
 def option02():
     # Initialize variables with default values
     last_submit = ''
@@ -966,7 +1073,10 @@ def option02():
                            ohlc_records=ohlc_records, historical=historical, assumptions=assumptions, predictions=predictions, historical_records=historical_records, dfsingles=dfsingles
                            )
 
+
+
 @app.route('/tradingview', methods=['GET', 'POST'])
+@login_required
 def tradingview():
     # Initialize variables with default values
     last_submit = ''
@@ -994,7 +1104,10 @@ def tradingview():
         if 'comparison' in request.form:
             last_submit = 'comparison'
             start_date = request.form.get('start_date')
+            print(start_date,"start date")
             end_date = request.form.get('end_date')
+            print(end_date,"end_date")
+
             no_days = int(request.form.get('no_days', 150))
             ticker_symbol = request.form.get('ticker_symbol')
             comparison_date = request.form.get('date')
@@ -1098,12 +1211,17 @@ def tradingview():
                 'ohlc_date', '')  # Initialize ohlc_date
             ticker_symbol = request.form.get('ticker_symbol')
             open_value = request.form.get('open')
+            print(open_value,"open value")
             high_value = request.form.get('high')
+            print(high_value,"high value")
+
             low_value = request.form.get('low')
             close_value = request.form.get('close')
             date_obj = datetime.strptime(ohlc_date, '%Y-%m-%d').date()
+            print(date_obj,"date onject")
             existing_record = OHLC.query.filter_by(
                 date=date_obj, ticker_symbol=ticker_symbol).first()
+            
             if existing_record:
                 existing_record.open_value = float(open_value)
                 existing_record.high_value = float(high_value)
@@ -1181,7 +1299,6 @@ def tradingview():
                            )
 
 
-
 @app.route('/add_ohlc', methods=['GET', 'POST'])
 def add_ohlc():
     if request.method == 'POST':
@@ -1251,11 +1368,467 @@ def add_ohlc():
 
     return redirect(url_for('index'))
 
-@app.route('/trade', methods=['GET', 'POST'])
-def trade():
+# import requests
 
-    return render_template('trade.html') 
+# def get_alpaca_stock_price(symbol):
+#     API_KEY = "PK1GLKD13RBD5AQNFEKF"
+#     API_SECRET = "pg3e1tBHvvrlGjxMk6QgiMUAzJMKuW6ybI7m3Xua"
+#     BASE_URL = "https://data.alpaca.markets/v2"
 
+#     try:
+#         headers = {
+#             "APCA-API-KEY-ID": API_KEY,
+#             "APCA-API-SECRET-KEY": API_SECRET
+#         }
+#         response = requests.get(f"{BASE_URL}/stocks/{symbol}/quotes/latest", headers=headers)
+#         response.raise_for_status()  # Raise exception for bad status codes
+#         quote = response.json()["quote"]
+
+#         return {
+#             "symbol": symbol,
+#             "ask_price": float(quote["ap"]),  # Ask price (to buy)
+#             "bid_price": float(quote["bp"]),  # Bid price (to sell)
+#             "timestamp": quote["t"]  # ISO timestamp
+#         }
+#     except requests.exceptions.RequestException as e:
+#         return {"error": f"Failed to fetch quote: {str(e)}"}
+#     except Exception as e:
+#         return {"error": str(e)}
+
+@app.route('/trade')
+@login_required
+def index1():
+    return render_template('trade.html')
+
+
+
+# @app.route('/buy', methods=['POST'])
+# @login_required
+# def buy_stock():
+#     try:
+#         data = request.get_json()  # Get JSON data from fetch request
+#         print(data,"Data ")
+#         symbol = data.get('symbol')
+#         qty = int(data.get('quantity', 1))  # Default: 1 share
+#         price = int(data.get('price'))  # Default: 1 share
+ 
+
+        
+#         print(f"Buying {qty} shares of {symbol}")  # Debugging print
+
+
+#         # Submit buy order
+#         api.submit_order(
+#             symbol=symbol,
+#             qty=qty,
+#             side='buy',
+#             type='market',
+#             time_in_force='gtc'
+        
+#         )
+
+#         return jsonify({
+#             "message": f"Successfully bought {qty} shares of {symbol} at ${price}!",
+#             "price": price
+#         }), 200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 400
+from flask_jwt_extended import decode_token
+
+@app.route('/buy', methods=['POST'])
+@login_required
+def buy_stock():
+    if True:
+        data = request.get_json()
+        print(data, "Received Data")
+
+        symbol = data.get('symbol')
+        qty = int(data.get('quantity', 1))
+        price = data.get('price')
+        print(price, "Received Price")
+
+        # Find the user's wallet
+        token = session.get("access_token")
+        print(token, "Token Received")
+
+        decoded_token = decode_token(token)
+        user_id = decoded_token.get("sub") 
+        print("Decoded User ID:", user_id)
+
+        wallet = Wallet.query.filter_by(user_id=user_id).first()
+        if not wallet:
+            return jsonify({"error": "Wallet not found"}), 400
+
+        price = float(price)
+        total_cost = qty * price  
+        print(total_cost, "Total Cost")
+
+        # Check if the user has enough balance
+        if wallet.available_balance < total_cost:
+            return jsonify({"error": "Insufficient balance"}), 400
+
+        # Attempt to submit the buy order to the API first
+        try:
+            order = api.submit_order(symbol=symbol, qty=qty, side='buy', type='market', time_in_force='gtc')
+            order_id = order.id 
+            print(order_id,"oddr id is ")
+        except Exception as e:
+            error_message = str(e)
+            print("API Error:", error_message)
+
+            # Specific error handling if API submission fails
+            if "insufficient buying power" in error_message.lower():
+                return jsonify({"error": "Insufficient buying power. Please check your balance."}), 400
+            
+            return jsonify({"error": "Order could not be placed. Please try again later."}), 400
+
+        # If API order is successfully placed, update the database
+        before_balance = wallet.available_balance
+        after_balance = before_balance - total_cost
+        print(before_balance,"oooo")
+        # Create a transaction record
+        transaction = Transaction(
+            wallet_id=wallet.id,
+            type='buy',
+            before_balance=before_balance,
+            after_balance=after_balance,
+            comment=f"Bought {qty} shares of {symbol} at ${price}",
+            status="success",
+            alpaca_order_id=order_id  # Store order ID
+
+        )
+        print("bchagghcgsddddddddddddddc")
+
+        # Deduct the balance
+        wallet.available_balance = after_balance
+
+        # Check if user already owns this stock
+        user_stock = UserStock.query.filter_by(user_id=user_id, symbol=symbol).first()
+        if user_stock:
+            # Update existing stock quantity and average price
+            new_total_shares = user_stock.quantity + qty
+            new_avg_price = ((user_stock.quantity * user_stock.avg_price) + (qty * price)) / new_total_shares
+            user_stock.quantity = new_total_shares
+            user_stock.avg_price = new_avg_price
+        else:
+            # Create new stock entry
+            user_stock = UserStock(user_id=user_id, symbol=symbol, quantity=qty, avg_price=price)
+            db.session.add(user_stock)
+
+        # Commit changes to the database only after successful order placement
+        print("befo")
+        db.session.add(transaction)
+        print("af")
+
+        db.session.commit()
+        print("af..")
+
+
+        return jsonify({
+            "message": f"Successfully bought {qty} shares of {symbol} at ${price}!",
+            "price": price,
+            "order_id": order_id
+        }), 200
+
+    # except Exception as e:
+    #     return jsonify({"error": "An unexpected error occurred. Please try again later."}), 400
+
+
+
+
+# @app.route('/orders', methods=['GET'])
+# @login_required
+# def get_user_orders():
+#     try:
+#         # Get user ID
+#         token = session.get("access_token")
+#         decoded_token = decode_token(token)
+#         user_id = decoded_token.get("sub")  
+
+#         # Fetch all orders from Alpaca
+#         try:
+#             alpaca_orders = api.list_orders(status="all", limit=50)  # Fetch all recent orders
+#         except Exception as e:
+#             return jsonify({"error": f"Failed to fetch orders: {str(e)}"}), 400
+
+#         # Filter orders for this user
+#         user_transactions = Transaction.query.filter_by(wallet_id=Wallet.id, type='buy').all()
+#         user_order_ids = {t.alpaca_order_id for t in user_transactions}  # Get stored order IDs
+
+#         user_orders = []
+#         for order in alpaca_orders:
+#             if order.id in user_order_ids:
+#                 user_orders.append({
+#                     "order_id": order.id,
+#                     "symbol": order.symbol,
+#                     "qty": order.qty,
+#                     "filled_qty": order.filled_qty,
+#                     "price": order.limit_price or "Market",
+#                     "status": order.status,
+#                     "side": order.side,
+#                     "submitted_at": order.submitted_at
+#                 })
+
+#         return jsonify({"orders": user_orders}), 200
+
+#     except Exception as e:
+#         return jsonify({"error": "An unexpected error occurred while fetching orders."}), 400
+
+
+@app.route('/orders', methods=['GET'])
+@login_required
+def get_user_orders():
+    try:
+        # Get user ID from session token
+        token = session.get("access_token")
+        decoded_token = decode_token(token)
+        user_id = decoded_token.get("sub")  
+
+        # Fetch the wallet associated with this user
+        user_wallet = Wallet.query.filter_by(user_id=user_id).first()
+        if not user_wallet:
+            return jsonify({"error": "Wallet not found for the user"}), 404
+
+        # Fetch all orders from Alpaca
+        try:
+            alpaca_orders = api.list_orders(status="all", limit=50)  # Fetch all recent orders
+        except Exception as e:
+            return jsonify({"error": f"Failed to fetch orders: {str(e)}"}), 400
+
+        # Fetch user's transactions only (filter by wallet ID)
+        user_transactions = Transaction.query.filter_by(wallet_id=user_wallet.id, type='buy').all()
+        user_order_ids = {t.alpaca_order_id for t in user_transactions}  # Get stored order IDs
+
+        user_orders = []
+        for order in alpaca_orders:
+            if order.id in user_order_ids:
+                user_orders.append({
+                    "order_id": order.id,
+                    "symbol": order.symbol,
+                    "qty": order.qty,
+                    "filled_qty": order.filled_qty,
+                    "price": order.limit_price or "Market",
+                    "status": order.status,
+                    "side": order.side,
+                    "submitted_at": order.submitted_at
+                })
+
+        return jsonify({"orders": user_orders}), 200
+
+    except Exception as e:
+        return jsonify({"error": "An unexpected error occurred while fetching orders.", "details": str(e)}), 400
+
+
+@app.route('/sell', methods=['POST'])
+@login_required
+def sell_stock():
+    try:
+        data = request.get_json()
+        print(data, "Received Data")
+
+        symbol = data.get('symbol')
+        qty = int(data.get('quantity', 1))
+        price = data.get('price')
+
+        print(price, "Received Price")
+
+        # Get user ID from session token
+        token = session.get("access_token")
+        print(token, "Token Received")
+
+        decoded_token = decode_token(token)
+        user_id = decoded_token.get("sub") 
+        print("Decoded User ID:", user_id)
+
+        # Fetch user wallet
+        wallet = Wallet.query.filter_by(user_id=user_id).first()
+        if not wallet:
+            return jsonify({"error": "Wallet not found"}), 400
+
+        # Ensure price is a valid float
+        price = float(price)
+
+        # Check if user owns enough stock to sell
+        user_stock = UserStock.query.filter_by(user_id=user_id, symbol=symbol).first()
+        if not user_stock or user_stock.quantity < qty:
+            return jsonify({"error": "Insufficient stock quantity"}), 400
+
+        # Attempt to submit the sell order
+        try:
+            order = api.submit_order(symbol=symbol, qty=qty, side='sell', type='market', time_in_force='gtc')
+            order_id = order.id 
+            print(order_id,"ordererere")
+
+        except Exception as e:
+            error_message = str(e)
+            print("API Error:", error_message)
+            
+            # Specific error handling for wash trade
+            if "potential wash trade detected" in error_message.lower():
+                return jsonify({"error": "Potential wash trade detected. Use complex orders."}), 400
+            
+            # General error message for any other API failure
+            return jsonify({"error": "Order could not be placed. Please try again later."}), 400
+
+        # If API order is successfully placed, proceed with database update
+        total_sell_value = qty * price  
+        before_balance = wallet.available_balance
+        after_balance = before_balance + total_sell_value  # Add sold amount to wallet
+
+        # Create a transaction record
+        transaction = Transaction(
+            wallet_id=wallet.id,
+            type='sell',
+            before_balance=before_balance,
+            after_balance=after_balance,
+            comment=f"Sold {qty} shares of {symbol} at ${price}",
+            status="success",
+            alpaca_order_id=order_id  # Store order ID
+
+        )
+        print("jgshsadhfadsfasd")
+        # Update wallet balance
+        wallet.available_balance = after_balance
+        print("jg...............shsadhfadsfasd")
+
+
+        # Update or delete stock record
+        if user_stock.quantity == qty:
+            db.session.delete(user_stock)  # If selling all, remove stock entry
+        else:
+            user_stock.quantity -= qty  # Reduce quantity
+
+        # Commit changes
+        db.session.add(transaction)
+        db.session.commit()
+
+        return jsonify({
+            "message": f"Successfully sold {qty} shares of {symbol} at ${price}!",
+            "price": price,
+            "order_id": order_id
+
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": "An unexpected error occurred. Please try again later."}), 400
+
+
+
+
+@app.route('/get_orders', methods=['GET'])
+@login_required
+def get_orders():
+    try:
+        # Optional: Filter orders (e.g., only open or all)
+        request_params = GetOrdersRequest(
+            status=QueryOrderStatus.ALL,  # or OPEN, CLOSED
+            limit=50  # Max 500 per request
+        )
+        orders = trading_client.get_orders(filter=request_params)
+        print(orders,"orders are")
+
+        # Format the orders for response
+        orders_list = [
+            {
+                "order_id": str(order.id),
+                "symbol": order.symbol,
+                "qty": float(order.qty),
+                "side": order.side.value,
+                "status": order.status,
+                "filled_avg_price": float(order.filled_avg_price) if order.filled_avg_price else None,
+                "created_at": order.created_at.isoformat()
+            }
+            for order in orders
+        ]
+
+        return jsonify({
+            "message": "Orders retrieved successfully",
+            "orders": orders_list
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists', 'danger')
+            return redirect(url_for('register'))
+
+        new_user = User(username=username)
+        new_user.set_password(password)
+        db.session.add(new_user)
+        db.session.commit()
+
+        new_wallet = Wallet(user_id=new_user.id)
+        db.session.add(new_wallet)
+        db.session.commit()
+
+        flash('Registration successful. You can now log in.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
+
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            login_user(user)
+            #session,token(jwt)
+            # whenver user login then new token generate
+            # time limit : 1 day
+            # Ensure the user has a wallet; create if missing
+            access_token = create_access_token(identity=str(user.id), expires_delta=timedelta(days=1))
+            session['access_token']=access_token
+            
+            print(access_token,"acces token are")
+
+            if not Wallet.query.filter_by(user_id=user.id).first():
+                new_wallet = Wallet(user_id=user.id)
+                db.session.add(new_wallet)
+                db.session.commit()
+
+            flash('Login successful!', 'success')
+            return redirect(url_for('index'))  # Redirect to the main page
+            # return jsonify({
+            #     "message": "Login successful!",
+            #     "access_token": access_token
+            # }), 200
+
+        flash('Invalid credentials', 'danger')
+
+    return render_template('login.html')
+
+
+from flask import session
+
+
+
+
+
+@app.route('/logout')
+@login_required  # Ensures only logged-in users can access this
+def logout():
+    session.clear()
+    flash('You have been logged out.', 'success')
+
+    return redirect(url_for('login'))
 
 
 if __name__ == "__main__":

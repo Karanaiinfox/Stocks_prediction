@@ -282,7 +282,7 @@
             console.log(data); 
     
             if (response.ok) {
-                fetchOrders();
+                addHistory('buy', symbol, quantity, price); 
             }
         } catch (error) {
             console.error("Fetch error:", error);
@@ -307,7 +307,7 @@
             console.log(data); 
     
             if (response.ok) {
-                fetchOrders(); 
+                addHistory('sell', symbol, quantity, price); 
 
             }
         } catch (error) {
@@ -315,53 +315,42 @@
         }
     });
 
-  // Example API call to get orders and update the history table
     async function fetchOrders() {
-    try {
-        const response = await fetch('/orders'); // Replace with your actual API endpoint
-        const data = await response.json();
-        const historyBody = document.getElementById('history-body');
-            historyBody.innerHTML = ''; // Clear existing rows to prevent duplicates
-
-        if (data.orders && Array.isArray(data.orders)) {
-            data.orders.forEach(order => addHistory(order));
+        try {
+            const response = await fetch('/get_orders');  // Call the Flask API
+            const data = await response.json();  // Parse JSON response
+    
+            if (response.ok) {
+                document.getElementById('history-body').innerHTML = ''; // Clear existing table rows
+                
+                data.orders.forEach(order => {
+                    addHistory(order.side, order.symbol, order.qty, order.filled_avg_price, order.created_at,order.status);
+                });
+            } else {
+                console.error("Error fetching orders:", data.error);
+            }
+        } catch (error) {
+            console.error("Fetch error:", error);
         }
-    } catch (error) {
-        console.error("Error fetching orders:", error);
     }
-}
+    
+    function addHistory(type, symbol, quantity, price, date,status) {
+        const formattedDate = new Date(date).toLocaleString();
+        const totalValue = price ? (quantity * price).toFixed(2) : "N/A";
+        const tradeType = type === 'buy' ? 'Buy' : 'Sell';
+    
+        const row = `<tr>
+                        <td>${formattedDate}</td>
+                        <td>${symbol}</td>
+                        <td>${quantity}</td>
+                        <td>${price || 'N/A'}</td>
+                        <td>${totalValue}</td>
+                        <td>${tradeType}</td>
+                        <td>${status}</td> 
 
-    
-    function addHistory(order) {
-        const historyBody = document.getElementById('history-body');
-    
-        // Create a new row
-        const row = document.createElement('tr');
-    
-        // Format submitted_at date
-        const date = new Date(order.submitted_at).toLocaleString();
-    
-        // Calculate total value (for market price, just show "Market")
-        const totalValue = order.price === "Market" ? "Market" : (parseFloat(order.qty) * parseFloat(order.price)).toFixed(2);
-    
-        // Populate row with order data
-        row.innerHTML = `
-            <td>${date}</td>
-            <td>${order.symbol}</td>
-            <td>${order.qty}</td>
-            <td>${order.price}</td>
-            <td>${totalValue}</td>
-            <td>${order.side}</td>
-            <td>${order.status}</td>
-        `;
-    
-        // Append row to history table
-        historyBody.appendChild(row);
+                    </tr>`;
+        document.getElementById('history-body').insertAdjacentHTML('beforeend', row);
     }
-    
-  
-    // Call fetchOrders when the page loads
-    
     
     // Fetch orders on page load
     window.onload = fetchOrders;
